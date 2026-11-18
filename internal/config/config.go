@@ -116,12 +116,15 @@ type Rule struct {
 	HasPriority bool
 	Enter       []Action
 	Exit        []Action
+	// Linger keeps the rule matched this long after its condition turns
+	// false. Zero means it ends at once.
+	Linger time.Duration
 	// Outputs holds the remaining keys, validated by the engine.
 	Outputs map[string]any
 }
 
 // Reserved rule keys; every other key in a rule is an output.
-var ruleKeys = map[string]bool{"name": true, "while": true, "priority": true, "enter": true, "exit": true}
+var ruleKeys = map[string]bool{"name": true, "while": true, "priority": true, "linger": true, "enter": true, "exit": true}
 
 // DefaultPath returns the config path whilst uses when none is given.
 func DefaultPath() string {
@@ -576,6 +579,13 @@ func parseRule(t map[string]any) (*Rule, error) {
 		}
 		r.Priority = int(i)
 		r.HasPriority = true
+	}
+	if v, ok := t["linger"]; ok {
+		d, err := durationValue(v)
+		if err != nil || d <= 0 {
+			return nil, fmt.Errorf("linger must be a positive duration like \"1m\"")
+		}
+		r.Linger = d
 	}
 	var err error
 	if v, ok := t["enter"]; ok {

@@ -64,8 +64,9 @@ type factState struct {
 }
 
 type ruleState struct {
-	Matched bool      `json:"matched"`
-	Since   time.Time `json:"since,omitzero"`
+	Matched    bool      `json:"matched"`
+	Since      time.Time `json:"since,omitzero"`
+	FalseSince time.Time `json:"false_since,omitzero"`
 }
 
 type tempState struct {
@@ -150,7 +151,7 @@ func (e *Engine) Restore() error {
 	}
 	for _, r := range e.rules {
 		if rs, ok := st.Rules[r.Def.Name]; ok {
-			r.Matched, r.Since = rs.Matched, rs.Since
+			r.Matched, r.Since, r.FalseSince = rs.Matched, rs.Since, rs.FalseSince
 		}
 	}
 	for _, o := range e.outputs {
@@ -207,7 +208,7 @@ func (e *Engine) save(force bool) {
 		}
 	}
 	for _, r := range e.rules {
-		st.Rules[r.Def.Name] = ruleState{Matched: r.Matched, Since: r.Since}
+		st.Rules[r.Def.Name] = ruleState{Matched: r.Matched, Since: r.Since, FalseSince: r.FalseSince}
 	}
 	for _, o := range e.outputs {
 		if raw := o.Save(); len(raw) > 0 {

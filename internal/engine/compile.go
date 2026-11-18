@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/PeterSR/systemd-whilst/internal/config"
 	"github.com/PeterSR/systemd-whilst/internal/expr"
@@ -34,6 +35,7 @@ type RuleDef struct {
 	Name     string
 	Origin   string
 	Priority int
+	Linger   time.Duration
 	While    *expr.Program
 	Outputs  map[string]any
 	Enter    []config.Action
@@ -91,7 +93,7 @@ func Compile(cfg *config.Config, outputs []output.Output) (*Compiled, error) {
 			return nil, fmt.Errorf("rule %s: %w", r.Name, err)
 		}
 		d.Origin = r.Origin
-		d.Enter, d.Exit = r.Enter, r.Exit
+		d.Enter, d.Exit, d.Linger = r.Enter, r.Exit, r.Linger
 		if r.HasPriority {
 			d.Priority = r.Priority
 		}
@@ -117,7 +119,7 @@ func compileRule(env *expr.Env, name, while string, raw map[string]any, byName m
 	for k, v := range raw {
 		o, ok := byName[k]
 		if !ok {
-			return nil, fmt.Errorf("unknown key %q (outputs are: %s; other keys are name, while, priority, enter, exit)", k, strings.Join(outNames, ", "))
+			return nil, fmt.Errorf("unknown key %q (outputs are: %s; other keys are name, while, priority, linger, enter, exit)", k, strings.Join(outNames, ", "))
 		}
 		claim, err := o.Parse(v)
 		if err != nil {

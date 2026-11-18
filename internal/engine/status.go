@@ -51,7 +51,10 @@ type RuleStatus struct {
 	Exit     []string       `json:"exit,omitempty"`
 	TempID   string         `json:"temp_id,omitempty"`
 	Until    time.Time      `json:"until,omitzero"`
-	Attached bool           `json:"attached,omitempty"`
+	// LingerUntil is set while the rule lingers after its condition
+	// turned false.
+	LingerUntil time.Time `json:"linger_until,omitzero"`
+	Attached    bool      `json:"attached,omitempty"`
 }
 
 // OutputStatus describes one output.
@@ -96,6 +99,11 @@ func (e *Engine) Snapshot() Status {
 		rs := RuleStatus{
 			Name: r.Def.Name, Origin: r.Def.Origin, While: r.Def.While.Source, Priority: r.Def.Priority,
 			Matched: r.Matched, Since: r.Since, Error: r.Err, Facts: r.Def.While.Facts,
+		}
+		if r.Err == "" {
+			// While the condition cannot be evaluated, the rule keeps its
+			// state and is not known to be lingering.
+			rs.LingerUntil = r.LingerUntil()
 		}
 		if len(r.Def.Outputs) > 0 {
 			rs.Outputs = r.Def.Outputs

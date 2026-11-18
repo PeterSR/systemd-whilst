@@ -102,7 +102,10 @@ type Rule struct {
 	Def     *RuleDef
 	Matched bool
 	Since   time.Time // when Matched last changed
-	Err     string
+	// FalseSince is set while the rule lingers: it still matches, but its
+	// condition has been false since then.
+	FalseSince time.Time
+	Err        string
 	// Waiting is set when Err only means a fact has no confirmed value
 	// yet, as opposed to a condition that cannot work.
 	Waiting bool
@@ -186,7 +189,7 @@ func (e *Engine) install(comp *Compiled, oldFacts map[string]*Fact, oldRules []*
 	for _, d := range comp.Rules {
 		r := &Rule{Def: d}
 		if old, ok := prev[d.Name]; ok {
-			r.Matched, r.Since = old.Matched, old.Since
+			r.Matched, r.Since, r.FalseSince = old.Matched, old.Since, old.FalseSince
 		}
 		e.rules = append(e.rules, r)
 	}
@@ -518,11 +521,13 @@ func (e *Engine) Evaluate(t time.Time) {
 			}
 			if r.Temp != nil && r.Temp.finished(t) {
 				m = false
+			} else if err == nil {
+				m = r.linger(m, t)
 			}
 			if m == r.Matched {
 				continue
 			}
-			r.Matched, r.Since = m, t
+			r.Matched, r.Since, r.FalseSince = m, t, time.Time{}
 			if m {
 				slog.Info("rule matches", "rule", r.Def.Name)
 				enters = append(enters, r)
@@ -644,6 +649,31 @@ func (e *Engine) runActions(r *Rule, event string, actions []config.Action, t ti
 	return changed
 }
 
+// linger applies the rule's linger time to a freshly evaluated condition and
+// returns whether the rule should match.
+func (r *Rule) linger(cond bool, t time.Time) bool {
+	if cond || !r.Matched || r.Def.Linger <= 0 {
+		if cond && !r.FalseSince.IsZero() {
+			slog.Info("rule condition true again while lingering", "rule", r.Def.Name)
+		}
+		r.FalseSince = time.Time{}
+		return cond
+	}
+	if r.FalseSince.IsZero() {
+		r.FalseSince = t
+		slog.Info("rule condition false; lingering", "rule", r.Def.Name, "for", r.Def.Linger)
+	}
+	return t.Before(r.LingerUntil())
+}
+
+// LingerUntil is when a lingering rule stops matching, or zero.
+func (r *Rule) LingerUntil() time.Time {
+	if r.FalseSince.IsZero() || r.Def.Linger <= 0 {
+		return time.Time{}
+	}
+	return r.FalseSince.Add(r.Def.Linger)
+}
+
 func (e *Engine) allRules() []*Rule {
 	if len(e.temps) == 0 {
 		return e.rules
@@ -689,6 +719,9 @@ func (e *Engine) schedule(t time.Time) {
 		progs = append(progs, r.Def.While)
 		if r.Temp != nil && !r.Temp.Until.IsZero() {
 			consider(r.Temp.Until)
+		}
+		if u := r.LingerUntil(); !u.IsZero() {
+			consider(u)
 		}
 	}
 	for _, p := range progs {

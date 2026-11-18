@@ -16,10 +16,13 @@ while   = "ac && home"
 inhibit = ["sleep", "handle-lid-switch"]
 
 # Just unplugged: closing the lid does not suspend for 30 minutes, so the
-# laptop can be carried closed to another room.
+# laptop can be carried closed to another room. The linger keeps the lid lock
+# for a minute after plugging in again, until a monitor on the same cable has
+# been detected (by default logind ignores the lid when docked).
 [[rule]]
 name    = "just-unplugged"
 while   = "!ac && since('ac') < duration('30m')"
+linger  = "1m"
 inhibit = ["handle-lid-switch"]
 enter   = [{ notify = "Lid will not suspend for 30 minutes" }]
 

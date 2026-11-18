@@ -154,6 +154,9 @@ func printStatus(w io.Writer, st *engine.Status) {
 		if !r.Since.IsZero() {
 			since = ago(r.Since, now)
 		}
+		if !r.LingerUntil.IsZero() {
+			extra += " [lingering, ends " + ago(r.LingerUntil, now) + "]"
+		}
 		line := fmt.Sprintf("  %s %s%s\t%s\t%s\t%s", mark, r.Name, extra, r.While, since, describeOutputs(r.Outputs))
 		if r.Error != "" {
 			line += "  ERROR: " + r.Error
@@ -265,6 +268,9 @@ func explain(w io.Writer, st *engine.Status, target string) error {
 		}
 		if !r.Until.IsZero() {
 			fmt.Fprintf(w, "%s  temporary, ends %s\n", indent, ago(r.Until, st.Now))
+		}
+		if !r.LingerUntil.IsZero() {
+			fmt.Fprintf(w, "%s  condition is false; lingering, ends %s\n", indent, ago(r.LingerUntil, st.Now))
 		}
 	}
 

@@ -116,6 +116,7 @@ Other files can be included by path, relative to the including file.
 name     = "unique-name"        # optional; used in status, logs and state
 while    = "CEL condition"      # required
 priority = 10                   # optional; higher first
+linger   = "1m"                 # optional; keep matching this long after the condition ends
 inhibit  = [...]                # outputs: any number
 units    = [...]
 enter    = [{ ... }, ...]       # actions: optional
@@ -137,7 +138,11 @@ Two settings can go at the top of the main config: `tick = "30s"` (how often clo
 
 If a condition cannot be evaluated (for example a fact has no value yet), the rule keeps its previous state and `status` shows the error. The same goes for a condition that reads a fact whose value is still a guess (an `initial` value, or one remembered from before a reboot): whilst does not act on it until the fact has really been read.
 
-Give rules that have actions a `name` (names starting with `ensure:` are reserved). Rule state is remembered by name; an unnamed rule is named after its content, so editing it makes it a new rule (its exit actions run, then the new rule's enter actions). When a reload removes a rule that matched, its exit actions run. A rule removed while whilst was not running gets no exit actions, because whilst no longer knows them.
+### Linger
+
+`linger = "1m"` keeps a rule matching for a minute after its condition turns false: its outputs stay held and its exit actions wait. If the condition turns true again within that minute, the rule simply carries on, with no exit or enter actions. Use it to bridge the moment when one rule hands over to another and the new state is not fully visible yet. For example, plugging a closed laptop into a monitor that also powers it brings power at once but the monitor a few seconds later. Without a linger on the lid rule, the lid lock is gone in between and logind suspends. The linger also applies when a condition ends by time (`since(...)`), and survives a restart of whilst.
+
+Give rules that have actions a `name` (names starting with `ensure:` are reserved). Rule state is remembered by name; an unnamed rule is named after its content, so editing it (other than `priority` or `linger`) makes it a new rule (its exit actions run, then the new rule's enter actions). When a reload removes a rule that matched, its exit actions run. A rule removed while whilst was not running gets no exit actions, because whilst no longer knows them.
 
 ### Outputs
 
