@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/PeterSR/systemd-whilst/presets"
@@ -16,7 +17,21 @@ import (
 	"github.com/PeterSR/whilst/engine"
 )
 
+// version is set by the Makefile and release builds; other builds (such as
+// go install) take it from the module version Go records in the binary.
 var version = "dev"
+
+func init() { version = resolveVersion(version, debug.ReadBuildInfo) }
+
+func resolveVersion(stamped string, read func() (*debug.BuildInfo, bool)) string {
+	if stamped != "dev" {
+		return stamped
+	}
+	if info, ok := read(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return stamped
+}
 
 const usage = `whilst keeps your machine in the state your rules ask for, for as long as
 their conditions hold.
