@@ -68,7 +68,7 @@ A shell command cannot provide all four. A systemd unit can (`ExecStart` applies
 
 | Output | v1 |
 |---|---|
-| `units`: systemd units that should be running (user bus, later system bus) | yes |
+| `units`: systemd units that should be running (user bus, and system bus where polkit allows it) | yes |
 | `inhibit`: logind inhibitor locks (`sleep`, `idle`, `shutdown`, `handle-lid-switch`, ...) | yes |
 | `power_profile` (power-profiles-daemon) | later |
 | `gsettings` | later |
@@ -92,7 +92,7 @@ When several matching rules claim the same output:
 whilst only undoes what it did, and never fights a manual change:
 
 - An inhibitor lock cannot drift: whilst holds its file descriptor, and closing it releases the lock.
-- A unit is started when a rule starts wanting it, unless it is already running, in which case whilst does not own it and will not stop it. When no rule wants it any more, it is stopped only if whilst started it. A unit that stops while still wanted (a crash, or a manual stop) is left alone until no rule wants it and then one does again: restarting crashed services is systemd's job (`Restart=`). Ownership is persisted, so a restart of whilst does not forget which units it started.
+- A unit is started when a rule starts wanting it, unless it is already running, in which case whilst does not own it and will not stop it. When no rule wants it any more, it is stopped only if whilst started it. A unit that stops while still wanted (a crash, or a manual stop) is left alone until no rule wants it and then one does again: restarting crashed services is systemd's job (`Restart=`). Ownership is persisted, so a restart of whilst does not forget which units it started. The same holds for system units, kept per bus: a name on the system bus is a different unit from the same name on the user bus.
 - Scalar outputs (later) will restore the value from before they took it, unless it was changed in the meantime.
 
 ### Reconcile loop
@@ -229,7 +229,7 @@ Hard:
 - Linux.
 - systemd: logind for inhibitors, lid state and sleep, and the per-user manager (`systemd --user`) to run whilst as a user service and to manage units.
 - D-Bus, both the system and the session bus.
-- polkit, which lets an active session take blocking inhibitors and manage user units without root.
+- polkit, which lets an active session take blocking inhibitors and manage user units without root, and decides which system units a user may start and stop.
 
 Optional, only when a config uses them: UPower, NetworkManager, power-profiles-daemon, a desktop notification daemon, GNOME (gsettings).
 
@@ -251,7 +251,7 @@ With the default `LidSwitchIgnoreInhibited=yes`, a `sleep` inhibitor does not st
 ### Process and privilege
 
 - Runs as a systemd user service in the graphical session.
-- System units and root-only settings come later through a small privileged helper with a narrow interface, never by running the engine as root.
+- System units need no helper: whilst calls `StartUnit` and `StopUnit` on the system manager like on the user manager, and polkit decides per unit and per user (a rule for `org.freedesktop.systemd1.manage-units` that allows one unit). A denial is shown in status as an error on that unit and retried like any output that could not be applied. Root-only settings that polkit cannot grant would come through a small privileged helper with a narrow interface, never by running the engine as root.
 
 ## v1 scope
 
@@ -282,5 +282,5 @@ Unnamed rules are named after a hash of their content. An action of a newly regi
 ## Open questions
 
 - Whether block-sleep's `hold <pipe>` mode is worth keeping. `ensure` with `--pid`, a command, or `release` covers the cases seen so far.
-- System units (the system bus) through a privileged helper.
+- Settled: system units go through the system bus with polkit deciding, and need no privileged helper. Whether other root-only settings need one is still open.
 - Whether to publish facts to MQTT so Home Assistant can see them.

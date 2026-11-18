@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/godbus/dbus/v5"
+
 	"github.com/PeterSR/systemd-whilst/systemd"
 	"github.com/PeterSR/systemd-whilst/systemd/output"
 	"github.com/PeterSR/whilst/config"
@@ -58,6 +60,8 @@ type fakeSystemd struct {
 	active  map[string]bool
 	started []string
 	stopped []string
+	// fail, when set, is returned by Start and Stop.
+	fail error
 }
 
 func (s *fakeSystemd) ActiveState(u string) (string, error) {
@@ -67,11 +71,17 @@ func (s *fakeSystemd) ActiveState(u string) (string, error) {
 	return "inactive", nil
 }
 func (s *fakeSystemd) Start(u string) error {
+	if s.fail != nil {
+		return s.fail
+	}
 	s.active[u] = true
 	s.started = append(s.started, u)
 	return nil
 }
 func (s *fakeSystemd) Stop(u string) error {
+	if s.fail != nil {
+		return s.fail
+	}
 	s.active[u] = false
 	s.stopped = append(s.stopped, u)
 	return nil
@@ -89,7 +99,8 @@ type harness struct {
 	t       *testing.T
 	e       *engine.Engine
 	locker  *fakeLocker
-	systemd *fakeSystemd
+	systemd *fakeSystemd // the user manager
+	system  *fakeSystemd // the system manager
 	actions *fakeActions
 	now     time.Time
 }
@@ -100,11 +111,11 @@ func newHarness(t *testing.T, src, statePath, bootID string, active ...string) *
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &harness{t: t, locker: &fakeLocker{}, systemd: &fakeSystemd{active: map[string]bool{}}, actions: &fakeActions{}}
+	h := &harness{t: t, locker: &fakeLocker{}, systemd: &fakeSystemd{active: map[string]bool{}}, system: &fakeSystemd{active: map[string]bool{}}, actions: &fakeActions{}}
 	for _, u := range active {
 		h.systemd.active[u] = true
 	}
-	outs := []plugin.Output{output.NewInhibit(h.locker), output.NewUnits(h.systemd)}
+	outs := []plugin.Output{output.NewInhibit(h.locker), output.NewUnits(h.systemd, h.system)}
 	comp, err := engine.Compile(cfg, outs)
 	if err != nil {
 		t.Fatal(err)
@@ -335,9 +346,10 @@ func TestStatusSnapshot(t *testing.T) {
 
 func TestCompileErrors(t *testing.T) {
 	for _, src := range []string{
-		"[[rule]]\nwhile = \"true\"\ninhbit = [\"sleep\"]\n", // typo in output
-		"[[rule]]\nwhile = \"true\"\ninhibit = [\"slep\"]\n", // bad lock type
-		"[[rule]]\nwhile = \"true\"\nunits = [\"foo\"]\n",    // unit without suffix
+		"[[rule]]\nwhile = \"true\"\ninhbit = [\"sleep\"]\n",                               // typo in output
+		"[[rule]]\nwhile = \"true\"\ninhibit = [\"slep\"]\n",                               // bad lock type
+		"[[rule]]\nwhile = \"true\"\nunits = [\"foo\"]\n",                                  // unit without suffix
+		"[[rule]]\nwhile = \"true\"\nunits = [{ name = \"a.service\", bus = \"nope\" }]\n", // unknown bus
 	} {
 		cfg, err := config.Parse(src, systemd.Registry())
 		if err != nil {
@@ -347,5 +359,75 @@ func TestCompileErrors(t *testing.T) {
 		if _, err := engine.Compile(cfg, systemd.OfflineOutputs()); err == nil {
 			t.Errorf("expected an error for:\n%s", src)
 		}
+	}
+}
+
+func TestSystemUnits(t *testing.T) {
+	src := `
+[fact.home]
+type = "bool"
+command = "true"
+[[rule]]
+name  = "sync"
+while = "home"
+units = ["a.service", { name = "a.service", bus = "system" }, { name = "b.service", bus = "system" }]
+`
+	h := newHarness(t, src, "", "boot-1")
+	h.system.active["b.service"] = true
+	h.set("home", true)
+	if strings.Join(h.systemd.started, ",") != "a.service" || strings.Join(h.system.started, ",") != "a.service" {
+		t.Fatalf("started user %v, system %v", h.systemd.started, h.system.started)
+	}
+	var items []string
+	for _, o := range h.e.Snapshot().Outputs {
+		if o.Output == "units" {
+			for _, it := range o.Items {
+				items = append(items, it.Key+"|"+it.Note)
+			}
+		}
+	}
+	want := "a.service|started by whilst system:a.service|started by whilst system:b.service|was already running; whilst will not stop it"
+	if strings.Join(items, " ") != want {
+		t.Fatalf("items %v", items)
+	}
+	h.set("home", false)
+	if strings.Join(h.systemd.stopped, ",") != "a.service" || strings.Join(h.system.stopped, ",") != "a.service" {
+		t.Fatalf("stopped user %v, system %v", h.systemd.stopped, h.system.stopped)
+	}
+	if !h.system.active["b.service"] {
+		t.Fatal("stopped a system unit that was running before whilst wanted it")
+	}
+}
+
+func TestSystemUnitDeniedIsRetried(t *testing.T) {
+	src := `
+[fact.home]
+type = "bool"
+command = "true"
+[[rule]]
+name  = "sync"
+while = "home"
+units = [{ name = "b.service", bus = "system" }]
+`
+	h := newHarness(t, src, "", "boot-1")
+	h.system.fail = dbus.Error{Name: "org.freedesktop.DBus.Error.InteractiveAuthorizationRequired", Body: []any{"Interactive authentication required."}}
+	h.set("home", true)
+	st := h.e.Snapshot()
+	if st.NextWake.Sub(h.now) != 30*time.Second {
+		t.Fatalf("expected a retry in 30s, next wake %v", st.NextWake.Sub(h.now))
+	}
+	var item plugin.Item
+	for _, o := range st.Outputs {
+		if o.Output == "units" && len(o.Items) == 1 {
+			item = o.Items[0]
+		}
+	}
+	if item.Key != "system:b.service" || item.Held || !strings.HasPrefix(item.Err, "not allowed: needs a polkit rule for this unit") {
+		t.Fatalf("item %+v", item)
+	}
+	h.system.fail = nil
+	h.advance(30 * time.Second)
+	if strings.Join(h.system.started, ",") != "b.service" {
+		t.Fatalf("not started after the retry: %v", h.system.started)
 	}
 }

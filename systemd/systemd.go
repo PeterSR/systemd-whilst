@@ -38,14 +38,14 @@ func Registry() *config.Registry {
 func Outputs(hub *bus.Hub) []plugin.Output {
 	return []plugin.Output{
 		output.NewInhibit(output.LogindLocker{Hub: hub}),
-		output.NewUnits(output.UserSystemd{Hub: hub}),
+		output.NewUnits(output.Manager{Hub: hub, Bus: bus.Session}, output.Manager{Hub: hub, Bus: bus.System}),
 	}
 }
 
 // OfflineOutputs are output instances used only to parse and validate rule
 // values, never to apply them.
 func OfflineOutputs() []plugin.Output {
-	return []plugin.Output{output.NewInhibit(nil), output.NewUnits(nil)}
+	return []plugin.Output{output.NewInhibit(nil), output.NewUnits(nil, nil)}
 }
 
 // NewSource returns the engine's source factory for facts read through hub.

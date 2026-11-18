@@ -62,6 +62,7 @@ ensure:
   whilst ensure inhibit=sleep -- make -j8            while a command runs
   whilst ensure inhibit=sleep --pid 4242             while a process lives
   whilst ensure --while 'ac' units=backup.service    while a condition holds
+  whilst ensure 1h units=system:example.service      a system unit (needs a polkit rule)
   Flags: --while CEL, --until TIME, --name NAME, --pid PID.
   Without a duration, --until, --pid or a command, the rule stays until
   'whilst release'.

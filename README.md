@@ -165,11 +165,32 @@ Give rules that have actions a `name` (names starting with `ensure:` are reserve
 | Output | Effect while the rule matches |
 |---|---|
 | `inhibit = ["sleep", ...]` | Holds a blocking logind inhibitor lock. Types: `sleep`, `idle`, `shutdown`, `handle-lid-switch`, `handle-power-key`, `handle-suspend-key`, `handle-hibernate-key`, `handle-reboot-key`. |
-| `units = ["name.service", ...]` | Keeps user units running. |
+| `units = ["name.service", { name = "x.service", bus = "system" }, ...]` | Keeps units running. A plain name is a user unit; a table `{ name, bus }` with `bus = "system"` is a system unit (`bus = "user"` or `"session"` is a user unit). |
 
 When several rules want the same output, their wishes are merged: one lock covers the union of all wanted types, and a unit runs while any rule wants it. When the merged set of lock types changes, the new lock is taken before the old one is released.
 
 In `whilst status`, a unit shown as held is one whilst has claimed for a rule; it may since have stopped. Units are started when a rule starts wanting them and stopped when no rule wants them any more, but only if whilst started them. A unit that was already running is left running. A unit that stops while wanted (it crashed, or you stopped it) is not restarted until no rule wants it and then one does again: crash recovery is systemd's job (`Restart=`), and overriding a manual stop would be rude.
+
+System units are started and stopped on the system bus with the same calls as user units, and polkit decides whether you may. By default it asks for an administrator password, which whilst cannot answer, so a system unit needs a polkit rule that allows it. For example, in `/etc/polkit-1/rules.d/50-whilst-example.rules` (replace `USERNAME`):
+
+```js
+polkit.addRule(function(action, subject) {
+  if (action.id == "org.freedesktop.systemd1.manage-units" &&
+      action.lookup("unit") == "example.service" &&
+      (action.lookup("verb") == "start" || action.lookup("verb") == "stop") &&
+      subject.user == "USERNAME" && subject.local && subject.active)
+    return polkit.Result.YES;
+});
+```
+
+```toml
+[[rule]]
+name  = "example"
+while = "ac"
+units = [{ name = "example.service", bus = "system" }]
+```
+
+Status and `whilst why` show a system unit as `system:example.service` (`whilst why system:example.service`). Without a polkit rule, the unit shows the error `not allowed: needs a polkit rule for this unit`, and whilst tries again later like any output it could not apply. A unit name on the system bus and the same name on the user bus are different units, each owned on its own.
 
 Note on lids: with logind's default `LidSwitchIgnoreInhibited=yes`, a `sleep` lock does not stop the lid from suspending. Only `handle-lid-switch` does.
 
@@ -243,6 +264,7 @@ whilst ensure --until 22:00 inhibit=sleep,idle     # until a time
 whilst ensure inhibit=sleep -- make -j8            # while a command runs (exit code is passed on)
 whilst ensure inhibit=sleep --pid 4242             # while a process lives
 whilst ensure --while '!ac' inhibit=idle           # while a condition holds, until released
+whilst ensure 1h units=system:example.service      # a system unit, if a polkit rule allows it
 ```
 
 `ensure` applies the rule before it returns, and with a command it refuses to start the command if a lock could not be taken. A condition that cannot be checked yet (a fact not read since start) is not a refusal: the rule applies as soon as it can. Rules tied to a command or pid end when that `whilst ensure` process exits; if the whilst service restarts meanwhile, the rule is added again automatically. SIGTERM and SIGHUP sent to `whilst ensure` are passed on to the command. Other temporary rules survive restarts of whilst, unless their `--while` condition no longer compiles against the config (a reload keeps such a rule in its current state instead). Signals that were ignored when `whilst ensure` started (for example under `nohup`) stay ignored, for it and for the command.

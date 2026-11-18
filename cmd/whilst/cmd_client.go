@@ -205,15 +205,7 @@ func describeOutputs(outs map[string]any) string {
 	sort.Strings(keys)
 	var parts []string
 	for _, k := range keys {
-		var items []string
-		if l, ok := outs[k].([]any); ok {
-			for _, x := range l {
-				items = append(items, fmt.Sprint(x))
-			}
-		} else {
-			items = append(items, fmt.Sprint(outs[k]))
-		}
-		parts = append(parts, k+"="+strings.Join(items, ","))
+		parts = append(parts, k+"="+strings.Join(claimItems(outs[k]), ","))
 	}
 	return strings.Join(parts, " ")
 }
@@ -293,6 +285,16 @@ func explain(w io.Writer, st *engine.Status, target string) error {
 	}
 
 	outName, key, hasKey := strings.Cut(target, ":")
+	if hasKey {
+		// "units:NAME" names an item of an output, but an item's own key
+		// can hold a colon too ("system:NAME"), so a prefix that is no
+		// output's name is part of the key.
+		isOutput := false
+		for _, o := range st.Outputs {
+			isOutput = isOutput || o.Output == outName
+		}
+		hasKey = isOutput
+	}
 	found := false
 	for _, o := range st.Outputs {
 		known := map[string]bool{}
@@ -359,14 +361,39 @@ func explain(w io.Writer, st *engine.Status, target string) error {
 }
 
 func outputMentions(claim any, key string) bool {
-	if l, ok := claim.([]any); ok {
-		for _, x := range l {
-			if fmt.Sprint(x) == key {
-				return true
-			}
+	if claim == nil {
+		return false
+	}
+	for _, x := range claimItems(claim) {
+		if x == key {
+			return true
 		}
 	}
 	return false
+}
+
+// claimItems names the elements of a rule's output value the way status
+// names the items: a units table { name, bus } is its name, or
+// "system:NAME" for a system unit.
+func claimItems(claim any) []string {
+	l, ok := claim.([]any)
+	if !ok {
+		l = []any{claim}
+	}
+	items := make([]string, 0, len(l))
+	for _, x := range l {
+		if m, ok := x.(map[string]any); ok {
+			if name, ok := m["name"].(string); ok {
+				if b, _ := m["bus"].(string); b == "system" {
+					name = "system:" + name
+				}
+				items = append(items, name)
+				continue
+			}
+		}
+		items = append(items, fmt.Sprint(x))
+	}
+	return items
 }
 
 func listCandidates(w io.Writer, st *engine.Status, out, key string, explainRule func(engine.RuleStatus, string)) {
@@ -419,9 +446,16 @@ func cmdEnsure(args []string) (int, error) {
 				list = prev
 			}
 			for _, x := range strings.Split(v, ",") {
-				if x = strings.TrimSpace(x); x != "" {
-					list = append(list, x)
+				x = strings.TrimSpace(x)
+				if x == "" {
+					continue
 				}
+				// units=system:NAME asks for a system unit, as status shows it.
+				if name, ok := strings.CutPrefix(x, "system:"); ok && k == "units" {
+					list = append(list, map[string]any{"name": name, "bus": "system"})
+					continue
+				}
+				list = append(list, x)
 			}
 			spec.Outputs[k] = list
 			continue
