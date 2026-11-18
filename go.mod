@@ -3,14 +3,15 @@ module github.com/PeterSR/systemd-whilst
 go 1.25
 
 require (
-	cel.dev/cel-go v0.33.4
-	github.com/BurntSushi/toml v1.6.0
+	github.com/PeterSR/whilst v0.1.0
 	github.com/godbus/dbus/v5 v5.2.4
 	golang.org/x/sys v0.27.0
 )
 
 require (
+	cel.dev/cel-go v0.33.4 // indirect
 	cel.dev/expr v0.25.1 // indirect
+	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948 // indirect

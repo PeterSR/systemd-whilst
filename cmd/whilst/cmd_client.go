@@ -14,11 +14,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/PeterSR/systemd-whilst/internal/config"
-	"github.com/PeterSR/systemd-whilst/internal/engine"
-	"github.com/PeterSR/systemd-whilst/internal/ipc"
-	"github.com/PeterSR/systemd-whilst/internal/output"
-	"github.com/PeterSR/systemd-whilst/internal/value"
+	"github.com/PeterSR/systemd-whilst/systemd/ipc"
+	"github.com/PeterSR/whilst/engine"
+	"github.com/PeterSR/whilst/plugin"
+	"github.com/PeterSR/whilst/value"
 )
 
 func dial() (*ipc.Client, error) { return ipc.Dial() }
@@ -328,7 +327,7 @@ func explain(w io.Writer, st *engine.Status, target string) error {
 		}
 		for _, k := range keys {
 			found = true
-			var item *output.Item
+			var item *plugin.Item
 			for i := range o.Items {
 				if o.Items[i].Key == k {
 					item = &o.Items[i]
@@ -430,7 +429,7 @@ func cmdEnsure(args []string) (int, error) {
 		if dur != 0 {
 			return 0, usagef("unexpected argument %q", p)
 		}
-		d, err := config.ParseDuration(p)
+		d, err := parseDuration(p)
 		if err != nil || d <= 0 {
 			return 0, usagef("%q is neither a duration nor OUTPUT=VALUE", p)
 		}
@@ -669,4 +668,17 @@ func cmdReload(args []string) error {
 	}
 	fmt.Println(msg)
 	return nil
+}
+
+// parseDuration accepts Go durations ("1h30m") and plain numbers of hours
+// ("1.5"), for the command line; config durations always need a unit.
+func parseDuration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if d, err := time.ParseDuration(s); err == nil {
+		return d, nil
+	}
+	if h, err := strconv.ParseFloat(s, 64); err == nil && h >= 0 {
+		return time.Duration(h * float64(time.Hour)), nil
+	}
+	return 0, fmt.Errorf("invalid duration %q", s)
 }

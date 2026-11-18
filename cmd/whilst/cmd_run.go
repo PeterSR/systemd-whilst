@@ -15,19 +15,17 @@ import (
 
 	"github.com/godbus/dbus/v5"
 
-	"github.com/PeterSR/systemd-whilst/internal/action"
-	"github.com/PeterSR/systemd-whilst/internal/bus"
-	"github.com/PeterSR/systemd-whilst/internal/config"
-	"github.com/PeterSR/systemd-whilst/internal/engine"
-	"github.com/PeterSR/systemd-whilst/internal/ipc"
-	"github.com/PeterSR/systemd-whilst/internal/output"
-	"github.com/PeterSR/systemd-whilst/internal/source"
-	"github.com/PeterSR/systemd-whilst/internal/watch"
+	"github.com/PeterSR/systemd-whilst/systemd"
+	"github.com/PeterSR/systemd-whilst/systemd/bus"
+	"github.com/PeterSR/systemd-whilst/systemd/ipc"
+	"github.com/PeterSR/systemd-whilst/systemd/watch"
+	"github.com/PeterSR/whilst/config"
+	"github.com/PeterSR/whilst/engine"
 )
 
 func cmdRun(args []string) error {
 	fs := newFlags("run")
-	path := fs.String("config", config.DefaultPath(), "config file")
+	path := fs.String("config", systemd.ConfigPath(), "config file")
 	debug := fs.Bool("debug", false, "log debug messages")
 	noWatch := fs.Bool("no-watch", false, "do not reload when the config file changes")
 	if pos, err := parseFlags(fs, args); err != nil {
@@ -49,10 +47,8 @@ func cmdRun(args []string) error {
 		cancel()
 	}
 
-	outputs := []output.Output{
-		output.NewInhibit(output.LogindLocker{Hub: hub}),
-		output.NewUnits(output.UserSystemd{Hub: hub}),
-	}
+	reg := systemd.Registry()
+	outputs := systemd.Outputs(hub)
 	load := func(allowMissing bool) (*engine.Compiled, error) {
 		// Only a missing top-level file means "no config". A missing include
 		// is an error, or a typo would silently drop every rule.
@@ -63,7 +59,7 @@ func cmdRun(args []string) error {
 			}
 			slog.Warn("no config file; running with no rules (temporary rules from `whilst ensure` still work)", "path", *path)
 			cfg = config.Empty(*path)
-		} else if cfg, err = config.Load(*path); err != nil {
+		} else if cfg, err = config.Load(*path, reg); err != nil {
 			return nil, err
 		}
 		return engine.Compile(cfg, outputs)
@@ -88,12 +84,12 @@ func cmdRun(args []string) error {
 	}
 
 	e := engine.New(comp, engine.Deps{
-		Hub:       hub,
-		NewSource: func(f *config.Fact) (source.Source, error) { return source.New(f, hub) },
+		Lifetimes: systemd.Lifetimes{Hub: hub},
+		NewSource: systemd.NewSource(hub),
 		Outputs:   outputs,
-		Actions:   action.NewBusRunner(ctx, hub),
-		StatePath: engine.DefaultStatePath(),
-		BootID:    engine.ReadBootID(),
+		Actions:   systemd.NewRunner(ctx, hub),
+		StatePath: systemd.StatePath(),
+		BootID:    systemd.BootID(),
 	})
 	if err := e.Restore(); err != nil {
 		slog.Warn("cannot restore state; starting fresh", "error", err)
@@ -114,13 +110,17 @@ func cmdRun(args []string) error {
 		comp, err := load(allowMissing)
 		if err != nil {
 			slog.Error("reload failed; keeping the running config", "trigger", why, "error", err)
+			// A no-op once the engine stopped.
 			e.Do(func() { e.SetConfigError(err) })
 			watchFiles(watched) // directories may have been recreated
 			return nil, err
 		}
 		watched = comp.Config.Files
 		watchFiles(watched)
-		e.Do(func() { e.Reload(comp) })
+		if !e.Do(func() { e.Reload(comp) }) {
+			// The engine stopped; the process is shutting down.
+			return nil, errors.New("whilst is stopping")
+		}
 		return comp, nil
 	}
 	if !*noWatch {

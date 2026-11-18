@@ -264,6 +264,21 @@ Enough to replace systemd-block-sleep completely and prove the model:
 - CLI: `run`, `status`, `why`, `check`, `ensure`, `release`, `reload`, `presets`.
 - Presets for UPower, logind and NetworkManager.
 
+## Architecture
+
+The engine and the platform are separate modules, so other front ends can reuse the engine:
+
+- **The engine** ([github.com/PeterSR/whilst](https://github.com/PeterSR/whilst), its own repository) holds everything platform-independent: values, CEL, config loading, the reconcile loop, temporary rules, status and the state file. It implements `expr` and `state` facts and the `set` action. Everything else comes in through a registry and a few interfaces:
+  - A *fact kind* names the key that selects it in a fact table, the other keys it accepts, and whether it is *rereadable* (gets a real reading on its own, so its initial or remembered value is only a guess, and the engine waits for it at start). It parses its table into a spec with a stable *source key*, which tells whether a reload or an edit changed where a value comes from and is stored in the state file.
+  - An *action kind* parses its table; the application's runner carries the action out.
+  - *Outputs* parse rule values, reconcile the wanted state and persist what must survive a restart, as before.
+  - *Sources* deliver values for a fact, already in the core's normal form.
+  - *Lifetimes* tell the engine when the caller of a temporary rule has gone.
+  - Presets are an `fs.FS` the application supplies; the boot id is a string it supplies.
+- **The application** (`systemd/`, `cmd/whilst`) provides all of the above for a Linux desktop: the D-Bus hub and match rules, the D-Bus, unit, command and file sources and their triggers (`on_dbus`, `on_dbus_session`, `every`), conversion of D-Bus values, the `inhibit` and `units` outputs, the `notify`, `command` and `dbus_call` actions, the D-Bus API, the config watcher and the presets.
+
+Unnamed rules are named after a hash of their content. An action of a newly registered kind adds only itself to that hash, so adding a kind never renames rules that do not use it. The three original kinds (notify, command, dbus_call) declare a legacy hash slot, which keeps the names earlier versions gave. Source keys of the built-in kinds keep the layout earlier versions stored, so existing state files load unchanged.
+
 ## Open questions
 
 - Whether block-sleep's `hold <pipe>` mode is worth keeping. `ensure` with `--pid`, a command, or `release` covers the cases seen so far.

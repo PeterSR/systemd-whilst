@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "boot_id": "boot-golden",
+  "facts": {
+    "c": {
+      "value": {
+        "a": 1
+      },
+      "def": "[\"command\",null,null,null,{\"Run\":\"echo hi\",\"Output\":\"json\",\"Timeout\":0},\"\",\"\",null]||"
+    },
+    "c2": {
+      "value": "x",
+      "def": "[\"command\",null,null,null,{\"Run\":\"true\",\"Output\":\"stdout\",\"Timeout\":0},\"\",\"\",null]||"
+    },
+    "e": {
+      "value": true,
+      "def": "[\"expr\",null,null,null,null,\"\",\"c2 == 'x'\",null]||"
+    },
+    "f": {
+      "value": 1,
+      "def": "[\"file\",null,null,null,null,\"/sys/class/power_supply/AC/online\",\"\",null]|int|"
+    },
+    "p": {
+      "value": false,
+      "changed": "2026-11-18T12:01:00Z",
+      "def": "[\"dbus\",{\"Bus\":\"system\",\"Service\":\"org.freedesktop.UPower\",\"Path\":\"/org/freedesktop/UPower\",\"Interface\":\"org.freedesktop.UPower\",\"Property\":\"OnBattery\"},null,null,null,\"\",\"\",null]|bool|!value"
+    },
+    "s": {
+      "value": "on",
+      "changed": "2026-11-18T12:00:00Z",
+      "def": "[\"state\",null,null,null,null,\"\",\"\",[\"off\",\"on\"]]|string|"
+    },
+    "s2": {
+      "value": 4,
+      "changed": "2026-11-18T12:00:00Z",
+      "def": "[\"state\",null,null,null,null,\"\",\"\",null]||"
+    },
+    "sig": {
+      "value": false,
+      "def": "[\"dbus_signal\",null,{\"Bus\":\"system\",\"Match\":{\"Type\":\"signal\",\"Sender\":\"\",\"Path\":\"\",\"PathNamespace\":\"\",\"Interface\":\"org.freedesktop.login1.Manager\",\"Member\":\"PrepareForSleep\",\"Args\":null},\"Arg\":0},null,null,\"\",\"\",null]||"
+    },
+    "u1": {
+      "value": "active",
+      "def": "[\"unit\",null,null,{\"Bus\":\"session\",\"Name\":\"foo.service\"},null,\"\",\"\",null]||"
+    },
+    "u2": {
+      "value": "inactive",
+      "def": "[\"unit\",null,null,{\"Bus\":\"system\",\"Name\":\"bar.timer\"},null,\"\",\"\",null]||"
+    }
+  },
+  "rules": {
+    "lingering": {
+      "matched": true,
+      "since": "2026-11-18T12:00:00Z",
+      "false_since": "2026-11-18T12:01:00Z"
+    },
+    "rule-91e4d4bd": {
+      "matched": true,
+      "since": "2026-11-18T12:00:00Z"
+    },
+    "rule-9ebec054": {
+      "matched": false,
+      "since": "2026-11-18T12:01:00Z"
+    },
+    "rule-b1d9c55e": {
+      "matched": true,
+      "since": "2026-11-18T12:00:00Z"
+    },
+    "rule-ca80ae7d": {
+      "matched": false,
+      "since": "2026-11-18T12:01:00Z"
+    },
+    "rule-e01cfa71": {
+      "matched": true,
+      "since": "2026-11-18T12:00:00Z"
+    },
+    "rule-f642e73a": {
+      "matched": false,
+      "since": "2026-11-18T12:01:00Z"
+    },
+    "rule-f642e73a-2": {
+      "matched": false,
+      "since": "2026-11-18T12:01:00Z"
+    }
+  },
+  "outputs": {
+    "units": {
+      "a.service": true
+    }
+  },
+  "temps": [
+    {
+      "id": "t1",
+      "spec": {
+        "name": "build",
+        "until": "2099-01-01T00:00:00Z",
+        "outputs": {
+          "inhibit": [
+            "idle"
+          ]
+        }
+      },
+      "created": "2026-11-18T12:00:00Z",
+      "matched": true
+    },
+    {
+      "id": "t2",
+      "spec": {
+        "while": "!p",
+        "outputs": {
+          "inhibit": [
+            "sleep"
+          ]
+        }
+      },
+      "created": "2026-11-18T12:00:00Z",
+      "matched": true
+    }
+  ],
+  "temp_seq": 2
+}

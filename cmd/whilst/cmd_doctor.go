@@ -12,11 +12,12 @@ import (
 
 	"github.com/godbus/dbus/v5"
 
-	"github.com/PeterSR/systemd-whilst/internal/bus"
-	"github.com/PeterSR/systemd-whilst/internal/config"
-	"github.com/PeterSR/systemd-whilst/internal/engine"
-	"github.com/PeterSR/systemd-whilst/internal/ipc"
-	"github.com/PeterSR/systemd-whilst/internal/output"
+	"github.com/PeterSR/systemd-whilst/systemd"
+	"github.com/PeterSR/systemd-whilst/systemd/bus"
+	"github.com/PeterSR/systemd-whilst/systemd/ipc"
+	"github.com/PeterSR/systemd-whilst/systemd/output"
+	"github.com/PeterSR/whilst/config"
+	"github.com/PeterSR/whilst/engine"
 )
 
 // doctor collects check results and prints them as it goes.
@@ -245,17 +246,17 @@ func (d *doctor) checkLogind(hub *bus.Hub) {
 }
 
 func (d *doctor) checkConfig() {
-	path := config.DefaultPath()
+	path := systemd.ConfigPath()
 	if _, err := os.Stat(path); err != nil {
 		d.warn("no config at %s; whilst has no rules until you write one", path)
 		return
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.Load(path, systemd.Registry())
 	if err != nil {
 		d.fail("%v", err)
 		return
 	}
-	comp, err := engine.Compile(cfg, offlineOutputs())
+	comp, err := engine.Compile(cfg, systemd.OfflineOutputs())
 	if err != nil {
 		d.fail("%s: %v", path, err)
 		return
@@ -282,7 +283,7 @@ func (d *doctor) checkService() {
 	if st.ConfigError != "" {
 		d.fail("the service could not load its config, and runs the last good one: %s", st.ConfigError)
 	}
-	if path := config.DefaultPath(); st.Config != "" && st.Config != path {
+	if path := systemd.ConfigPath(); st.Config != "" && st.Config != path {
 		d.info("the service uses %s, not %s", st.Config, path)
 	}
 	for _, w := range st.Warnings {

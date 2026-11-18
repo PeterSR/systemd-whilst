@@ -10,10 +10,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/PeterSR/systemd-whilst/internal/config"
-	"github.com/PeterSR/systemd-whilst/internal/engine"
-	"github.com/PeterSR/systemd-whilst/internal/output"
 	"github.com/PeterSR/systemd-whilst/presets"
+	"github.com/PeterSR/systemd-whilst/systemd"
+	"github.com/PeterSR/whilst/config"
+	"github.com/PeterSR/whilst/engine"
 )
 
 var version = "dev"
@@ -135,19 +135,13 @@ func parseFlags(fs *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
-// offlineOutputs are output instances used only to parse and validate rule
-// values, never to apply them.
-func offlineOutputs() []output.Output {
-	return []output.Output{output.NewInhibit(nil), output.NewUnits(nil)}
-}
-
 func cmdCheck(args []string, w io.Writer) error {
 	fs := newFlags("check")
 	pos, err := parseFlags(fs, args)
 	if err != nil {
 		return err
 	}
-	path := config.DefaultPath()
+	path := systemd.ConfigPath()
 	switch len(pos) {
 	case 0:
 	case 1:
@@ -155,11 +149,11 @@ func cmdCheck(args []string, w io.Writer) error {
 	default:
 		return usagef("check takes at most one path")
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.Load(path, systemd.Registry())
 	if err != nil {
 		return err
 	}
-	comp, err := engine.Compile(cfg, offlineOutputs())
+	comp, err := engine.Compile(cfg, systemd.OfflineOutputs())
 	if err != nil {
 		return err
 	}

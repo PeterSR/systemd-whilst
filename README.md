@@ -269,6 +269,14 @@ State lets `since()` and rule state survive a restart of whilst, so enter action
 
 The engine owns `io.github.PeterSR.Whilst` on the session bus, object `/io/github/PeterSR/Whilst`, interface `io.github.PeterSR.Whilst1`, with methods `Status() -> s` (JSON), `Ensure(s spec) -> s` (JSON `{"id": ..., "problems": [...]}`; the rule is applied before the reply), `Release(s id) -> i`, `Reload() -> s`.
 
+## Architecture
+
+The rule engine is its own module, [whilst](https://github.com/PeterSR/whilst), which this repository builds on:
+
+- [whilst](https://github.com/PeterSR/whilst) is the rule engine without any platform: facts, rules (`while`, `hold`, `linger`, priorities), outputs and actions as interfaces, CEL expressions, config loading and the state file. It knows `expr` and `state` facts and the `set` action itself. It imports nothing from D-Bus or systemd, which a test checks, and other applications can build on it.
+- `systemd/` is the Linux application: the D-Bus connections, the `dbus`, `dbus_signal`, `unit`, `command` and `file` fact kinds with their triggers, the `inhibit` and `units` outputs, the `notify`, `command` and `dbus_call` actions, the D-Bus API and the config watcher. It registers its fact kinds, action kinds and the presets with the engine.
+- `cmd/whilst` is the binary, and `presets/` holds the preset files it embeds.
+
 ## License
 
 MIT

@@ -8,8 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/PeterSR/systemd-whilst/internal/config"
-	"github.com/PeterSR/systemd-whilst/internal/engine"
+	"github.com/PeterSR/systemd-whilst/systemd"
 )
 
 const unitName = "whilst.service"
@@ -196,7 +195,7 @@ func cmdInstall(args []string, w io.Writer) error {
 	}
 	fmt.Fprintln(w, "whilst.service is enabled and running")
 
-	cfg := config.DefaultPath()
+	cfg := systemd.ConfigPath()
 	if _, err := os.Stat(cfg); err != nil {
 		fmt.Fprintf(w, "\nNo config yet. Write %s (see the README for examples),\nthen run 'whilst check'. The service picks it up by itself.\n", cfg)
 	}
@@ -240,7 +239,7 @@ func cmdUninstall(args []string, w io.Writer) error {
 	} else {
 		fmt.Fprint(w, "left in place: ")
 	}
-	fmt.Fprintf(w, "config in %s, state in %s\n", filepath.Dir(config.DefaultPath()), filepath.Dir(engine.DefaultStatePath()))
+	fmt.Fprintf(w, "config in %s, state in %s\n", filepath.Dir(systemd.ConfigPath()), filepath.Dir(systemd.StatePath()))
 	return nil
 }
 
