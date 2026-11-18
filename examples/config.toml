@@ -1,0 +1,36 @@
+# Example whilst config. Copy to ~/.config/whilst/config.toml and adapt.
+# Check it with:  whilst check ~/.config/whilst/config.toml
+
+# Facts for power (ac, battery), lid (lid, docked) and network (connection,
+# ssid, online, metered). See them with:  whilst presets upower
+include = ["preset:upower", "preset:logind", "preset:networkmanager"]
+
+# A named condition. Rules can use `home`, and since('home') works.
+[fact.home]
+expr = "ssid == 'MyHomeWifi'"
+
+# At home on mains: never sleep, not even when the lid closes.
+[[rule]]
+name    = "home-on-mains"
+while   = "ac && home"
+inhibit = ["sleep", "handle-lid-switch"]
+
+# Just unplugged: closing the lid does not suspend for 30 minutes, so the
+# laptop can be carried closed to another room.
+[[rule]]
+name    = "just-unplugged"
+while   = "!ac && since('ac') < duration('30m')"
+inhibit = ["handle-lid-switch"]
+enter   = [{ notify = "Lid will not suspend for 30 minutes" }]
+
+# On mains elsewhere: no idle sleep, but closing the lid still suspends.
+[[rule]]
+name    = "mains-elsewhere"
+while   = "ac"
+inhibit = ["sleep"]
+
+# Keep a user service running only at home on mains.
+# [[rule]]
+# name  = "sync-at-home"
+# while = "home && ac"
+# units = ["syncthing.service"]

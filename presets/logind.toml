@@ -1,0 +1,14 @@
+# Lid and dock facts from systemd-logind.
+#   include = ["preset:logind"]
+
+# true while the lid is closed.
+[fact.lid]
+type = "bool"
+dbus = { service = "org.freedesktop.login1", path = "/org/freedesktop/login1", interface = "org.freedesktop.login1.Manager", property = "LidClosed" }
+
+# true when docked or an external display is attached, as logind sees it.
+# logind does not announce changes to this property, so it is polled.
+[fact.docked]
+type  = "bool"
+dbus  = { service = "org.freedesktop.login1", path = "/org/freedesktop/login1", interface = "org.freedesktop.login1.Manager", property = "Docked" }
+every = "5s"

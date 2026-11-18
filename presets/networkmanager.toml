@@ -1,0 +1,31 @@
+# Network facts from NetworkManager.
+#   include = ["preset:networkmanager"]
+#
+# Re-read whenever NetworkManager's primary connection or state changes.
+
+# Name of the primary connection (for Wi-Fi this is usually the SSID), or ""
+# when offline.
+[fact.connection]
+type    = "string"
+command = "LC_ALL=C nmcli -t -g GENERAL.CONNECTION device show \"$(LC_ALL=C nmcli -t -f DEVICE,STATE device | awk -F: '$2==\"connected\"{print $1; exit}')\" 2>/dev/null || true"
+on_dbus = ["type='signal',sender='org.freedesktop.NetworkManager',path='/org/freedesktop/NetworkManager',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'"]
+every   = "1m"
+
+# SSID of the Wi-Fi network currently connected to, or "".
+[fact.ssid]
+type    = "string"
+command = "LC_ALL=C nmcli -t -f ACTIVE,SSID device wifi list --rescan no | sed -n 's/^yes://p' | head -n1"
+on_dbus = ["type='signal',sender='org.freedesktop.NetworkManager',path='/org/freedesktop/NetworkManager',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'"]
+every   = "1m"
+
+# true when NetworkManager reports full internet connectivity.
+[fact.online]
+type      = "bool"
+dbus      = { service = "org.freedesktop.NetworkManager", path = "/org/freedesktop/NetworkManager", interface = "org.freedesktop.NetworkManager", property = "Connectivity" }
+transform = "value == 4"
+
+# true when NetworkManager thinks the primary connection is metered.
+[fact.metered]
+type      = "bool"
+dbus      = { service = "org.freedesktop.NetworkManager", path = "/org/freedesktop/NetworkManager", interface = "org.freedesktop.NetworkManager", property = "Metered" }
+transform = "value == 1 || value == 3"

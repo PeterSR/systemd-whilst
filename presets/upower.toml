@@ -1,0 +1,13 @@
+# Power facts from UPower.
+#   include = ["preset:upower"]
+
+# true when running on mains power.
+[fact.ac]
+type      = "bool"
+dbus      = { service = "org.freedesktop.UPower", path = "/org/freedesktop/UPower", interface = "org.freedesktop.UPower", property = "OnBattery" }
+transform = "!value"
+
+# Combined battery charge in percent (0 to 100).
+[fact.battery]
+type = "double"
+dbus = { service = "org.freedesktop.UPower", path = "/org/freedesktop/UPower/devices/DisplayDevice", interface = "org.freedesktop.UPower.Device", property = "Percentage" }
