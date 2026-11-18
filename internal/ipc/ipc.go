@@ -20,8 +20,9 @@ const (
 	Iface = "io.github.PeterSR.Whilst1"
 )
 
-// Reloader loads and compiles the config again; it runs off the engine
-// goroutine because it reads files.
+// Reloader loads, compiles and applies the config again, recording a
+// failure in the engine; it runs off the engine goroutine because it reads
+// files.
 type Reloader func() (*engine.Compiled, error)
 
 // Server is the exported object.
@@ -114,10 +115,8 @@ func (s *Server) Release(id string) (int32, *dbus.Error) {
 func (s *Server) Reload() (string, *dbus.Error) {
 	comp, err := s.reload()
 	if err != nil {
-		s.e.Do(func() { s.e.SetConfigError(err) })
 		return "", dbusErr(err)
 	}
-	s.e.Do(func() { s.e.Reload(comp) })
 	return fmt.Sprintf("loaded %d facts and %d rules", len(comp.Facts), len(comp.Rules)), nil
 }
 

@@ -198,7 +198,7 @@ func cmdInstall(args []string, w io.Writer) error {
 
 	cfg := config.DefaultPath()
 	if _, err := os.Stat(cfg); err != nil {
-		fmt.Fprintf(w, "\nNo config yet. Write %s (see the README for examples),\nthen run 'whilst check' and 'whilst reload'.\n", cfg)
+		fmt.Fprintf(w, "\nNo config yet. Write %s (see the README for examples),\nthen run 'whilst check'. The service picks it up by itself.\n", cfg)
 	}
 	return nil
 }

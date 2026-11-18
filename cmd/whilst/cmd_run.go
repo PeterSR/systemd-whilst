@@ -7,8 +7,11 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 
@@ -19,12 +22,14 @@ import (
 	"github.com/PeterSR/systemd-whilst/internal/ipc"
 	"github.com/PeterSR/systemd-whilst/internal/output"
 	"github.com/PeterSR/systemd-whilst/internal/source"
+	"github.com/PeterSR/systemd-whilst/internal/watch"
 )
 
 func cmdRun(args []string) error {
 	fs := newFlags("run")
 	path := fs.String("config", config.DefaultPath(), "config file")
 	debug := fs.Bool("debug", false, "log debug messages")
+	noWatch := fs.Bool("no-watch", false, "do not reload when the config file changes")
 	if pos, err := parseFlags(fs, args); err != nil {
 		return err
 	} else if len(pos) > 0 {
@@ -48,11 +53,14 @@ func cmdRun(args []string) error {
 		output.NewInhibit(output.LogindLocker{Hub: hub}),
 		output.NewUnits(output.UserSystemd{Hub: hub}),
 	}
-	load := func() (*engine.Compiled, error) {
+	load := func(allowMissing bool) (*engine.Compiled, error) {
 		// Only a missing top-level file means "no config". A missing include
 		// is an error, or a typo would silently drop every rule.
 		var cfg *config.Config
 		if _, err := os.Stat(*path); errors.Is(err, os.ErrNotExist) {
+			if !allowMissing {
+				return nil, fmt.Errorf("%s was removed; keeping the running config (`whilst reload` runs with no rules)", *path)
+			}
 			slog.Warn("no config file; running with no rules (temporary rules from `whilst ensure` still work)", "path", *path)
 			cfg = config.Empty(*path)
 		} else if cfg, err = config.Load(*path); err != nil {
@@ -60,7 +68,18 @@ func cmdRun(args []string) error {
 		}
 		return engine.Compile(cfg, outputs)
 	}
-	comp, err := load()
+	// The watched files follow each successful load, so new includes are
+	// watched too.
+	var watcherPtr atomic.Pointer[watch.Watcher]
+	watchFiles := func(files []string) {
+		if watcher := watcherPtr.Load(); watcher != nil {
+			watch.EnsureDir(*path) // so a config written there later is seen
+			abs, _ := filepath.Abs(*path)
+			watcher.Set(append([]string{abs}, files...))
+		}
+	}
+
+	comp, err := load(true)
 	if err != nil {
 		return err
 	}
@@ -84,7 +103,36 @@ func cmdRun(args []string) error {
 	// (SIGHUP) right after must not kill the process.
 	sigs := make(chan os.Signal, 4)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	if err := ipc.Serve(hub, e, load); err != nil {
+	// reload loads, re-arms the watcher and applies the config, one at a
+	// time, so configs are applied in the order they were read. A watcher
+	// reload treats a deleted config as an error rather than "no rules".
+	var reloadMu sync.Mutex
+	watched := comp.Config.Files
+	reload := func(why string, allowMissing bool) (*engine.Compiled, error) {
+		reloadMu.Lock()
+		defer reloadMu.Unlock()
+		comp, err := load(allowMissing)
+		if err != nil {
+			slog.Error("reload failed; keeping the running config", "trigger", why, "error", err)
+			e.Do(func() { e.SetConfigError(err) })
+			watchFiles(watched) // directories may have been recreated
+			return nil, err
+		}
+		watched = comp.Config.Files
+		watchFiles(watched)
+		e.Do(func() { e.Reload(comp) })
+		return comp, nil
+	}
+	if !*noWatch {
+		if w, err := watch.New(ctx, 500*time.Millisecond, func() { reload("file change", false) }); err != nil {
+			slog.Warn("cannot watch the config for changes; use `whilst reload`", "error", err)
+		} else {
+			watcherPtr.Store(w)
+			watchFiles(watched)
+		}
+	}
+
+	if err := ipc.Serve(hub, e, func() (*engine.Compiled, error) { return reload("whilst reload", true) }); err != nil {
 		return err
 	}
 
@@ -106,13 +154,7 @@ func cmdRun(args []string) error {
 	go func() {
 		for s := range sigs {
 			if s == syscall.SIGHUP {
-				comp, err := load()
-				if err != nil {
-					slog.Error("reload failed; keeping the running config", "error", err)
-					e.Do(func() { e.SetConfigError(err) })
-					continue
-				}
-				e.Do(func() { e.Reload(comp) })
+				reload("SIGHUP", true)
 				continue
 			}
 			slog.Info("stopping", "signal", s.String())

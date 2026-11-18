@@ -22,7 +22,8 @@ const usage = `whilst keeps your machine in the state your rules ask for, for as
 their conditions hold.
 
 Usage:
-  whilst run [--config PATH] [--debug]   run the engine (what the user service starts)
+  whilst run [--config PATH] [--debug] [--no-watch]
+                                         run the engine (what the user service starts)
   whilst status [--json]                 facts, rules and outputs right now
   whilst why TARGET                      why an output is (not) held, or why a rule
                                          does (not) match. TARGET is an output

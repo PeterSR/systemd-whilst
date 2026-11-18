@@ -206,7 +206,8 @@ units = ["syncthing.service"]
 ## CLI
 
 ```
-whilst run                     run the engine (what the user service starts)
+whilst run [--no-watch]        run the engine (what the user service starts); reloads the
+                               config when it changes unless --no-watch
 whilst status                  facts, matching rules, held outputs and who owns them
 whilst why <target>            why an output or rule is in its current state
 whilst check [config]          parse and type-check the config, warn about tick fallbacks

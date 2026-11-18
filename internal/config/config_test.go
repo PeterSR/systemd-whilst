@@ -175,3 +175,18 @@ func TestStateDoubleLiterals(t *testing.T) {
 		t.Fatal("path and path_namespace together should fail")
 	}
 }
+
+func TestLoadRecordsFiles(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "config.toml")
+	inc := filepath.Join(dir, "more.toml")
+	os.WriteFile(main, []byte("include = [\"preset:upower\", \"more.toml\"]\n"), 0o644)
+	os.WriteFile(inc, []byte("[fact.x]\nstate = [\"a\"]\ninitial = \"a\"\n"), 0o644)
+	cfg, err := Load(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Files) != 2 || cfg.Files[0] != main || cfg.Files[1] != inc {
+		t.Fatalf("files %v, want the main file and the include (not the preset)", cfg.Files)
+	}
+}

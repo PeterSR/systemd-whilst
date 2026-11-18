@@ -27,7 +27,10 @@ import (
 
 // Config is a loaded configuration, with includes merged in.
 type Config struct {
-	Path  string
+	Path string
+	// Files lists the files on disk the config was read from (the main
+	// file and its includes, not presets), as absolute paths.
+	Files []string
 	Facts map[string]*Fact
 	// FactOrder lists fact names in the order they were declared.
 	FactOrder []string
@@ -198,6 +201,7 @@ func (l *loader) file(path string, top bool, depth int) error {
 			return err
 		}
 		dir = filepath.Dir(origin)
+		l.cfg.Files = append(l.cfg.Files, origin)
 	}
 	if l.seen[origin] {
 		return fmt.Errorf("%s is included more than once", origin)

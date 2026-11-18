@@ -48,13 +48,14 @@ make install           # builds, then runs ./whilst install
 go install github.com/PeterSR/systemd-whilst/cmd/whilst@latest && whilst install
 ```
 
-Then write `~/.config/whilst/config.toml` (start from [examples/config.toml](examples/config.toml)), check it, and reload:
+Then write `~/.config/whilst/config.toml` (start from [examples/config.toml](examples/config.toml)) and check it:
 
 ```sh
 whilst check
-whilst reload          # or: systemctl --user reload whilst
 whilst status
 ```
+
+The service reloads the config by itself when the file or any file it includes changes, half a second after the last write. A config that does not load is not applied: whilst keeps the running one and shows the error in `whilst status` and `whilst doctor`. Deleting the config file is not applied either; to run with no rules, empty the file or run `whilst reload` after deleting it. `whilst reload` reloads at once and prints the result (`systemctl --user reload whilst` also works), and `whilst run --no-watch` turns automatic reloading off.
 
 Without a config file whilst runs with no rules, and `whilst ensure` still works.
 
@@ -217,7 +218,8 @@ inhibit = ["handle-lid-switch"]
 ## Command line
 
 ```
-whilst run [--config PATH] [--debug]   run the engine (the user service does this)
+whilst run [--config PATH] [--debug] [--no-watch]
+                                       run the engine (the user service does this)
 whilst status [--json]                 facts, rules and outputs right now
 whilst why TARGET                      why an output is or is not held, or why a rule
                                        does or does not match
