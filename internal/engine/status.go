@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"slices"
 	"sort"
 	"time"
 
@@ -38,9 +39,12 @@ type FactStatus struct {
 
 // RuleStatus describes one rule.
 type RuleStatus struct {
-	Name     string         `json:"name"`
-	Origin   string         `json:"origin,omitempty"`
-	While    string         `json:"while"`
+	Name   string `json:"name"`
+	Origin string `json:"origin,omitempty"`
+	While  string `json:"while"`
+	Hold   string `json:"hold,omitempty"`
+	// Holding is set while the rule matches only through hold.
+	Holding  bool           `json:"holding,omitempty"`
 	Priority int            `json:"priority"`
 	Matched  bool           `json:"matched"`
 	Since    time.Time      `json:"since,omitzero"`
@@ -99,6 +103,16 @@ func (e *Engine) Snapshot() Status {
 		rs := RuleStatus{
 			Name: r.Def.Name, Origin: r.Def.Origin, While: r.Def.While.Source, Priority: r.Def.Priority,
 			Matched: r.Matched, Since: r.Since, Error: r.Err, Facts: r.Def.While.Facts,
+		}
+		if r.Def.Hold != nil {
+			rs.Hold = r.Def.Hold.Source
+			rs.Holding = r.Holding
+			rs.Facts = slices.Clone(rs.Facts)
+			for _, f := range r.Def.Hold.Facts {
+				if !slices.Contains(rs.Facts, f) {
+					rs.Facts = append(rs.Facts, f)
+				}
+			}
 		}
 		if r.Err == "" {
 			// While the condition cannot be evaluated, the rule keeps its

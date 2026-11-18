@@ -108,9 +108,11 @@ type Command struct {
 
 // Rule is one [[rule]] table.
 type Rule struct {
-	Name     string
-	Origin   string
-	While    string
+	Name   string
+	Origin string
+	While  string
+	// Hold, if set, keeps a matching rule matching while it is true.
+	Hold     string
 	Priority int
 	// HasPriority is false when the rule relies on file order.
 	HasPriority bool
@@ -124,7 +126,7 @@ type Rule struct {
 }
 
 // Reserved rule keys; every other key in a rule is an output.
-var ruleKeys = map[string]bool{"name": true, "while": true, "priority": true, "linger": true, "enter": true, "exit": true}
+var ruleKeys = map[string]bool{"name": true, "while": true, "hold": true, "priority": true, "linger": true, "enter": true, "exit": true}
 
 // DefaultPath returns the config path whilst uses when none is given.
 func DefaultPath() string {
@@ -580,6 +582,11 @@ func parseRule(t map[string]any) (*Rule, error) {
 		r.Priority = int(i)
 		r.HasPriority = true
 	}
+	if v, ok := t["hold"]; ok {
+		if r.Hold, ok = v.(string); !ok || strings.TrimSpace(r.Hold) == "" {
+			return nil, fmt.Errorf("hold must be a CEL condition string")
+		}
+	}
 	if v, ok := t["linger"]; ok {
 		d, err := durationValue(v)
 		if err != nil || d <= 0 {
@@ -652,10 +659,11 @@ func (c *Config) validate() error {
 func contentHash(r *Rule) string {
 	b, _ := json.Marshal(struct {
 		While   string
+		Hold    string `json:",omitempty"`
 		Outputs map[string]any
 		Enter   []Action
 		Exit    []Action
-	}{r.While, r.Outputs, r.Enter, r.Exit})
+	}{r.While, r.Hold, r.Outputs, r.Enter, r.Exit})
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:4])
 }

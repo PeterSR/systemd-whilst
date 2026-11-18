@@ -53,7 +53,7 @@ A rule has a `while` condition (CEL) and two kinds of effect:
 
 The test for which one to use is whether there is anything to undo. A lock, a unit or a setting has an "off", so it is an output. A notification or a hibernate has none, so it is an action. Taking an inhibitor from an `enter` command would leak it: nothing releases it on exit or takes it again after a crash.
 
-Rule keys are flat. `name`, `while`, `priority`, `linger`, `enter` and `exit` are reserved; every other key must name a known output type, so typos fail at load.
+Rule keys are flat. `name`, `while`, `hold`, `priority`, `linger`, `enter` and `exit` are reserved; every other key must name a known output type, so typos fail at load.
 
 ### Outputs
 

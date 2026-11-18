@@ -37,6 +37,7 @@ type RuleDef struct {
 	Priority int
 	Linger   time.Duration
 	While    *expr.Program
+	Hold     *expr.Program
 	Outputs  map[string]any
 	Enter    []config.Action
 	Exit     []config.Action
@@ -92,12 +93,17 @@ func Compile(cfg *config.Config, outputs []output.Output) (*Compiled, error) {
 		if err != nil {
 			return nil, fmt.Errorf("rule %s: %w", r.Name, err)
 		}
+		if r.Hold != "" {
+			if d.Hold, err = env.Compile(r.Hold, true); err != nil {
+				return nil, fmt.Errorf("rule %s: hold: %w", r.Name, err)
+			}
+		}
 		d.Origin = r.Origin
 		d.Enter, d.Exit, d.Linger = r.Enter, r.Exit, r.Linger
 		if r.HasPriority {
 			d.Priority = r.Priority
 		}
-		if d.While.Ticks {
+		if d.While.Ticks || (d.Hold != nil && d.Hold.Ticks) {
 			c.Warnings = append(c.Warnings, fmt.Sprintf("rule %s depends on the clock in a way whilst cannot schedule exactly; it is re-evaluated every %s", r.Name, cfg.Tick))
 		}
 		if len(d.Outputs) == 0 && len(d.Enter) == 0 && len(d.Exit) == 0 {
@@ -119,7 +125,7 @@ func compileRule(env *expr.Env, name, while string, raw map[string]any, byName m
 	for k, v := range raw {
 		o, ok := byName[k]
 		if !ok {
-			return nil, fmt.Errorf("unknown key %q (outputs are: %s; other keys are name, while, priority, linger, enter, exit)", k, strings.Join(outNames, ", "))
+			return nil, fmt.Errorf("unknown key %q (outputs are: %s; other keys are name, while, hold, priority, linger, enter, exit)", k, strings.Join(outNames, ", "))
 		}
 		claim, err := o.Parse(v)
 		if err != nil {

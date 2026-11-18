@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -105,7 +106,10 @@ type Rule struct {
 	// FalseSince is set while the rule lingers: it still matches, but its
 	// condition has been false since then.
 	FalseSince time.Time
-	Err        string
+	// Holding is set while the rule matches only through its hold
+	// condition.
+	Holding bool
+	Err     string
 	// Waiting is set when Err only means a fact has no confirmed value
 	// yet, as opposed to a condition that cannot work.
 	Waiting bool
@@ -497,20 +501,34 @@ func (e *Engine) Evaluate(t time.Time) {
 		ctx := e.ctx(t)
 		for _, r := range e.allRules() {
 			m, err := r.Def.While.EvalBool(vars, ctx)
-			r.Waiting = false
-			if p := e.provisionalInput(r.Def.While.Facts); p != "" && err == nil {
+			inputs := r.Def.While.Facts
+			r.Waiting, r.Holding = false, false
+			if r.Matched && r.Def.Hold != nil && (err != nil || !m) {
+				// A matching rule stays on while its hold condition is
+				// true, even when its while condition is not.
+				hm, herr := r.Def.Hold.EvalBool(vars, ctx)
+				inputs = append(slices.Clone(inputs), r.Def.Hold.Facts...)
+				switch {
+				case herr == nil && hm:
+					m, err, r.Holding = true, nil, true
+				case err == nil:
+					m, err = false, herr
+				}
+			}
+			if p := e.provisionalInput(inputs); p != "" && err == nil {
 				// Do not act on guesses (values remembered from before a
 				// reboot, initial values): keep the rule as it is until
 				// the fact has really been read.
 				err = fmt.Errorf("waiting for a first reading of %s", p)
 				r.Waiting = true
-			} else if p := cmp.Or(e.missingInput(r.Def.While.Facts), e.provisionalInput(r.Def.While.Facts)); p != "" && err != nil {
+			} else if p := cmp.Or(e.missingInput(inputs), e.provisionalInput(inputs)); p != "" && err != nil {
 				// An input without a confirmed value can explain the error;
 				// it is re-checked once the input has been read.
 				err = fmt.Errorf("waiting for a first reading of %s", p)
 				r.Waiting = true
 			}
 			if err != nil {
+				r.Holding = false
 				if r.Err != err.Error() {
 					slog.Warn("cannot evaluate rule", "rule", r.Def.Name, "error", err)
 				}
@@ -717,6 +735,9 @@ func (e *Engine) schedule(t time.Time) {
 	}
 	for _, r := range e.allRules() {
 		progs = append(progs, r.Def.While)
+		if r.Def.Hold != nil {
+			progs = append(progs, r.Def.Hold)
+		}
 		if r.Temp != nil && !r.Temp.Until.IsZero() {
 			consider(r.Temp.Until)
 		}

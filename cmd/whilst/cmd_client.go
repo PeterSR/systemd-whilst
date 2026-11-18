@@ -154,6 +154,9 @@ func printStatus(w io.Writer, st *engine.Status) {
 		if !r.Since.IsZero() {
 			since = ago(r.Since, now)
 		}
+		if r.Holding {
+			extra += " [held: " + r.Hold + "]"
+		}
 		if !r.LingerUntil.IsZero() {
 			extra += " [lingering, ends " + ago(r.LingerUntil, now) + "]"
 		}
@@ -249,6 +252,12 @@ func explain(w io.Writer, st *engine.Status, target string) error {
 		}
 		fmt.Fprintln(w)
 		fmt.Fprintf(w, "%s  while %s\n", indent, r.While)
+		if r.Hold != "" {
+			fmt.Fprintf(w, "%s  hold  %s\n", indent, r.Hold)
+			if r.Holding {
+				fmt.Fprintf(w, "%s  while is not true; matching because hold is true\n", indent)
+			}
+		}
 		if r.Error != "" {
 			fmt.Fprintf(w, "%s  cannot evaluate: %s\n", indent, r.Error)
 		}
